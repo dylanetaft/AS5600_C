@@ -16,9 +16,7 @@ struct AS5600_HAL {
 
 bool AS5600_isConnected();
 
-void AS5600_setHAL(struct AS5600_HAL hal);
-
-bool AS5600_begin(uint8_t directionPin);
+bool AS5600_begin(uint8_t directionPin, struct AS5600_HAL hal);
 
 //  address = fixed   0x36 for AS5600,
 //          = default 0x40 for AS5600L
