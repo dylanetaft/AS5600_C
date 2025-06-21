@@ -22,14 +22,38 @@ struct AS5600_HAL {
     uint32_t (*micros)();
 } ;
 
-bool AS5600_isConnected();
+struct AS5600_DEV {
+    uint8_t  address;
+    uint8_t  directionPin;
+    uint8_t  direction;
+    int      error;
 
-bool AS5600_begin(uint8_t directionPin, struct AS5600_HAL hal);
+
+    //  for getAngularSpeed()
+    uint32_t lastMeasurement;
+    int16_t  lastAngle;
+    int16_t  lastReadAngle;
+
+    //  for readAngle() and rawAngle()
+    uint16_t offset;
+
+
+    //  EXPERIMENTAL
+    //  cumulative position counter
+    //  works only if the sensor is read often enough.
+    int32_t  position;
+    int16_t  lastPosition; 
+    struct AS5600_HAL hal;
+};
+
+bool AS5600_isConnected(struct AS5600_DEV *dev);
+
+bool AS5600_begin(struct AS5600_DEV *dev, uint8_t directionPin, struct AS5600_HAL hal);
 
 //  address = fixed   0x36 for AS5600,
 //          = default 0x40 for AS5600L
 
-uint8_t AS5600_getAddress();
+uint8_t AS5600_getAddress(struct AS5600_DEV *dev);
 
 
 //  SET CONFIGURE REGISTERS
@@ -38,97 +62,97 @@ uint8_t AS5600_getAddress();
 //  0         = AS5600_CLOCK_WISE
 //  1         = AS5600_COUNTERCLOCK_WISE
 //  all other = AS5600_COUNTERCLOCK_WISE
-void     AS5600_setDirection(uint8_t direction);
-uint8_t  AS5600_getDirection();
+void     AS5600_setDirection(struct AS5600_DEV *dev, uint8_t direction);
+uint8_t  AS5600_getDirection(struct AS5600_DEV *dev);
 
-uint8_t  AS5600_getZMCO();
-
-//  0 .. 4095
-//  returns false if parameter out of range
-bool     AS5600_setZPosition(uint16_t value);
-uint16_t AS5600_getZPosition();
+uint8_t  AS5600_getZMCO(struct AS5600_DEV *dev);
 
 //  0 .. 4095
 //  returns false if parameter out of range
-bool     AS5600_setMPosition(uint16_t value);
-uint16_t AS5600_getMPosition();
+bool     AS5600_setZPosition(struct AS5600_DEV *dev, uint16_t value);
+uint16_t AS5600_getZPosition(struct AS5600_DEV *dev);
 
 //  0 .. 4095
 //  returns false if parameter out of range
-bool     AS5600_setMaxAngle(uint16_t value);
-uint16_t AS5600_getMaxAngle();
+bool     AS5600_setMPosition(struct AS5600_DEV *dev, uint16_t value);
+uint16_t AS5600_getMPosition(struct AS5600_DEV *dev);
+
+//  0 .. 4095
+//  returns false if parameter out of range
+bool     AS5600_setMaxAngle(struct AS5600_DEV *dev, uint16_t value);
+uint16_t AS5600_getMaxAngle(struct AS5600_DEV *dev);
 
 //  access the whole configuration register
 //  check datasheet for bit fields
 //  returns false if parameter out of range
-bool     AS5600_setConfigure(uint16_t value);
-uint16_t AS5600_getConfigure();
+bool     AS5600_setConfigure(struct AS5600_DEV *dev, uint16_t value);
+uint16_t AS5600_getConfigure(struct AS5600_DEV *dev);
 
 //  access details of the configuration register
 //  0 = Normal
 //  1,2,3 are low power mode - check datasheet
 //  returns false if parameter out of range
-bool     AS5600_setPowerMode(uint8_t powerMode);
-uint8_t  AS5600_getPowerMode();
+bool     AS5600_setPowerMode(struct AS5600_DEV *dev, uint8_t powerMode);
+uint8_t  AS5600_getPowerMode(struct AS5600_DEV *dev);
 
 //  0 = off    1 = lsb1    2 = lsb2    3 = lsb3
 //  returns false if parameter out of range
 //  suppresses noise when the magnet is not moving.
-bool     AS5600_setHysteresis(uint8_t hysteresis);
-uint8_t  AS5600_getHysteresis();
+bool     AS5600_setHysteresis(struct AS5600_DEV *dev, uint8_t hysteresis);
+uint8_t  AS5600_getHysteresis(struct AS5600_DEV *dev);
 
 //  0 = analog 0-100%
 //  1 = analog 10-90%
 //  2 = PWM
 //  returns false if parameter out of range
-bool    AS5600_setOutputMode(uint8_t outputMode);
-uint8_t AS5600_getOutputMode();
+bool    AS5600_setOutputMode(struct AS5600_DEV *dev, uint8_t outputMode);
+uint8_t AS5600_getOutputMode(struct AS5600_DEV *dev);
 
 //  0 = 115    1 = 230    2 = 460    3 = 920 (Hz)
 //  returns false if parameter out of range
-bool     AS5600_setPWMFrequency(uint8_t pwmFreq);
-uint8_t  AS5600_getPWMFrequency();
+bool     AS5600_setPWMFrequency(struct AS5600_DEV *dev, uint8_t pwmFreq);
+uint8_t  AS5600_getPWMFrequency(struct AS5600_DEV *dev);
 
 //  0 = 16x    1 = 8x     2 = 4x     3 = 2x
 //  returns false if parameter out of range
-bool     AS5600_setSlowFilter(uint8_t mask);
-uint8_t  AS5600_getSlowFilter();
+bool     AS5600_setSlowFilter(struct AS5600_DEV *dev, uint8_t mask);
+uint8_t  AS5600_getSlowFilter(struct AS5600_DEV *dev);
 
 //  0 = none   1 = LSB6   2 = LSB7   3 = LSB9
 //  4 = LSB18  5 = LSB21  6 = LSB24  7 = LSB10
 //  returns false if parameter out of range
-bool     AS5600_setFastFilter(uint8_t mask);
-uint8_t  AS5600_getFastFilter();
+bool     AS5600_setFastFilter(struct AS5600_DEV *dev, uint8_t mask);
+uint8_t  AS5600_getFastFilter(struct AS5600_DEV *dev);
 
 //  0 = OFF
 //  1 = ON   (auto low power mode)
 //  returns false if parameter out of range
-bool     AS5600_setWatchDog(uint8_t mask);
-uint8_t  AS5600_getWatchDog();
+bool     AS5600_setWatchDog(struct AS5600_DEV *dev, uint8_t mask);
+uint8_t  AS5600_getWatchDog(struct AS5600_DEV *dev);
 
 
 //  READ OUTPUT REGISTERS
-uint16_t AS5600_rawAngle();
-uint16_t AS5600_readAngle();
+uint16_t AS5600_rawAngle(struct AS5600_DEV *dev);
+uint16_t AS5600_readAngle(struct AS5600_DEV *dev);
 
 //  software based offset.
 //  degrees = -359.99 .. 359.99 (preferred)
 //  returns false if abs(parameter) > 36000
 //          => expect loss of precision
-bool     AS5600_setOffset(float degrees);       //  sets an absolute offset
-float    AS5600_getOffset();
-bool     AS5600_increaseOffset(float degrees);  //  adds to existing offset.
+bool     AS5600_setOffset(struct AS5600_DEV *dev, float degrees);       //  sets an absolute offset
+float    AS5600_getOffset(struct AS5600_DEV *dev);
+bool     AS5600_increaseOffset(struct AS5600_DEV *dev, float degrees);  //  adds to existing offset.
 
 
 //  READ STATUS REGISTERS
-uint8_t  AS5600_readStatus();
-uint8_t  AS5600_readAGC();
-uint16_t AS5600_readMagnitude();
+uint8_t  AS5600_readStatus(struct AS5600_DEV *dev);
+uint8_t  AS5600_readAGC(struct AS5600_DEV *dev);
+uint16_t AS5600_readMagnitude(struct AS5600_DEV *dev);
 
 //  access detail status register
-bool     AS5600_detectMagnet();
-bool     AS5600_magnetTooStrong();
-bool     AS5600_magnetTooWeak();
+bool     AS5600_detectMagnet(struct AS5600_DEV *dev);
+bool     AS5600_magnetTooStrong(struct AS5600_DEV *dev);
+bool     AS5600_magnetTooWeak(struct AS5600_DEV *dev);
 
 
 //  BURN COMMANDS
@@ -141,23 +165,23 @@ bool     AS5600_magnetTooWeak();
 //  approximation of the angular speed in rotations per second.
 //  mode == 1: radians /second
 //  mode == 0: degrees /second  (default)
-float    AS5600_getAngularSpeed(uint8_t mode,
+float    AS5600_getAngularSpeed(struct AS5600_DEV *dev, uint8_t mode,
                           bool update);
 
 //  EXPERIMENTAL CUMULATIVE POSITION
 //  reads sensor and updates cumulative position
-int32_t  AS5600_getCumulativePosition(bool update);
+int32_t  AS5600_getCumulativePosition(struct AS5600_DEV *dev, bool update);
 //  converts last position to whole revolutions.
-int32_t  AS5600_getRevolutions();
+int32_t  AS5600_getRevolutions(struct AS5600_DEV *dev);
 //  resets position only (not the i)
 //  returns last position but not internal lastPosition.
-int32_t  AS5600_resetPosition(int32_t position);
+int32_t  AS5600_resetPosition(struct AS5600_DEV *dev, int32_t position);
 //  resets position and internal lastPosition
 //  returns last position.
-int32_t  AS5600_resetCumulativePosition(int32_t position);
+int32_t  AS5600_resetCumulativePosition(struct AS5600_DEV *dev, int32_t position);
 
 //  EXPERIMENTAL 0.5.2
-int      AS5600_lastError();
+int      AS5600_lastError(struct AS5600_DEV *dev);
 
 
 #endif

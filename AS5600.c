@@ -15,11 +15,10 @@
 #include <math.h>
 #include <assert.h>
 
-struct AS5600_HAL _hal = {0};
 
 //  default addresses
-const uint8_t AS5600_DEFAULT_ADDRESS    = 0x36;
-const uint8_t AS5600L_DEFAULT_ADDRESS   = 0x40;
+const uint8_t AS5600_DEFAULT_DEV_ADDRESS   = 0x36;
+const uint8_t AS5600L_DEFAULT_DEV_ADDRESS   = 0x40;
 const uint8_t AS5600_SW_DIRECTION_PIN   = 255;
 
 //  setDirection
@@ -97,31 +96,11 @@ const uint8_t AS5600_WATCHDOG_OFF       = 0;
 const uint8_t AS5600_WATCHDOG_ON        = 1;
 
 
-uint8_t  readReg(uint8_t reg);
-uint16_t readReg2(uint8_t reg);
-uint8_t  writeReg(uint8_t reg, uint8_t value);
-uint8_t  writeReg2(uint8_t reg, uint16_t value);
+uint8_t  readReg(struct AS5600_DEV *dev, uint8_t reg);
+uint16_t readReg2(struct AS5600_DEV *dev, uint8_t reg);
+uint8_t  writeReg(struct AS5600_DEV *dev, uint8_t reg, uint8_t value);
+uint8_t  writeReg2(struct AS5600_DEV *dev, uint8_t reg, uint16_t value);
 
-uint8_t  _address         = AS5600_DEFAULT_ADDRESS;
-uint8_t  _directionPin    = 255;
-uint8_t  _direction       = AS5600_CLOCK_WISE;
-int      _error           = AS5600_OK;
-
-
-//  for getAngularSpeed()
-uint32_t _lastMeasurement = 0;
-int16_t  _lastAngle       = 0;
-int16_t  _lastReadAngle   = 0;
-
-//  for readAngle() and rawAngle()
-uint16_t _offset          = 0;
-
-
-//  EXPERIMENTAL
-//  cumulative position counter
-//  works only if the sensor is read often enough.
-int32_t  _position        = 0;
-int16_t  _lastPosition    = 0;
 //  CONFIGURATION REGISTERS
 const uint8_t AS5600_ZMCO = 0x00;
 const uint8_t AS5600_ZPOS = 0x01;   //  + 0x02
@@ -145,7 +124,7 @@ const uint8_t AS5600_CONF_WATCH_DOG     = 0x20;
 const uint8_t AS5600_RAW_ANGLE = 0x0C;   //  + 0x0D
 const uint8_t AS5600_ANGLE     = 0x0E;   //  + 0x0F
 
-// I2C_ADDRESS REGISTERS (AS5600L)
+// I2Cdev->address REGISTERS (AS5600L)
 const uint8_t AS5600_I2CADDR   = 0x20;
 const uint8_t AS5600_I2CUPDT   = 0x21;
 
@@ -163,38 +142,49 @@ const uint8_t AS5600_MAGNET_DETECT = 0x20;
 
 
 
-bool AS5600_begin(uint8_t directionPin, struct AS5600_HAL hal)
+bool AS5600_begin(struct AS5600_DEV *dev, uint8_t directionPin, struct AS5600_HAL hal)
 {
-  _hal = hal;
-  assert(_hal.i2c_start != NULL);
-  assert(_hal.i2c_end != NULL);
-  assert(_hal.i2c_writeBytes != NULL);
-  assert(_hal.i2c_readBytes != NULL);
-  assert(_hal.micros != NULL);
-  assert(_hal.digitalWrite != NULL);
+    dev->address         = AS5600_DEFAULT_DEV_ADDRESS;
+    dev->directionPin    = 255;
+    dev->direction       = AS5600_CLOCK_WISE;
+    dev->error           = AS5600_OK;
+    dev->lastMeasurement = 0;
+    dev->lastAngle       = 0;
+    dev->lastReadAngle   = 0;
+    dev->offset         = 0;
+    dev->position        = 0;
+    dev->lastPosition    = 0;
+    dev->hal             = hal;
+  
+  assert(hal.i2c_start != NULL);
+  assert(hal.i2c_end != NULL);
+  assert(hal.i2c_writeBytes != NULL);
+  assert(hal.i2c_readBytes != NULL);
+  assert(hal.micros != NULL);
+  assert(hal.digitalWrite != NULL);
 
-  _directionPin = directionPin;
+  dev->directionPin = directionPin;
 
-  AS5600_setDirection(AS5600_CLOCK_WISE);
+  AS5600_setDirection(dev, AS5600_CLOCK_WISE);
 
-  if (! AS5600_isConnected()) return false;
+  if (! AS5600_isConnected(dev)) return false;
   return true;
 }
 
 
-bool AS5600_isConnected()
+bool AS5600_isConnected(struct AS5600_DEV *dev)
 {
 
-  _hal.i2c_start(_address);
-  int ret = _hal.i2c_writeBytes(NULL,0);
-  _hal.i2c_end();
+  dev->hal.i2c_start(dev->address);
+  int ret = dev->hal.i2c_writeBytes(NULL,0);
+  dev->hal.i2c_end();
   return ( ret == 0);
 }
 
 
-uint8_t AS5600_getAddress()
+uint8_t AS5600_getAddress(struct AS5600_DEV *dev)
 {
-  return _address;
+  return dev->address;
 }
 
 
@@ -202,70 +192,70 @@ uint8_t AS5600_getAddress()
 //
 //  CONFIGURATION REGISTERS + direction pin
 //
-void AS5600_setDirection(uint8_t direction)
+void AS5600_setDirection(struct AS5600_DEV *dev, uint8_t direction)
 {
-  _direction = direction;
-  if (_directionPin != AS5600_SW_DIRECTION_PIN)
+  dev->direction = direction;
+  if (dev->directionPin != AS5600_SW_DIRECTION_PIN)
   {
-    _hal.digitalWrite(_directionPin, _direction);
+    dev->hal.digitalWrite(dev->directionPin, direction);
   }
 }
 
 
-uint8_t AS5600_getDirection()
+uint8_t AS5600_getDirection(struct AS5600_DEV *dev)
 {
-  return _direction;
+  return dev->direction;
 }
 
 
-uint8_t AS5600_getZMCO()
+uint8_t AS5600_getZMCO(struct AS5600_DEV *dev)
 {
-  uint8_t value = readReg(AS5600_ZMCO);
+  uint8_t value = readReg(dev, AS5600_ZMCO);
   return value;
 }
 
 
-bool AS5600_setZPosition(uint16_t value)
+bool AS5600_setZPosition(struct AS5600_DEV *dev, uint16_t value)
 {
   if (value > 0x0FFF) return false;
-  writeReg2(AS5600_ZPOS, value);
+  writeReg2(dev, AS5600_ZPOS, value);
   return true;
 }
 
 
-uint16_t AS5600_getZPosition()
+uint16_t AS5600_getZPosition(struct AS5600_DEV *dev)
 {
-  uint16_t value = readReg2(AS5600_ZPOS) & 0x0FFF;
+  uint16_t value = readReg2(dev, AS5600_ZPOS) & 0x0FFF;
   return value;
 }
 
 
-bool AS5600_setMPosition(uint16_t value)
+bool AS5600_setMPosition(struct AS5600_DEV *dev, uint16_t value)
 {
   if (value > 0x0FFF) return false;
-  writeReg2(AS5600_MPOS, value);
+  writeReg2(dev, AS5600_MPOS, value);
   return true;
 }
 
 
-uint16_t AS5600_getMPosition()
+uint16_t AS5600_getMPosition(struct AS5600_DEV *dev)
 {
-  uint16_t value = readReg2(AS5600_MPOS) & 0x0FFF;
+  uint16_t value = readReg2(dev, AS5600_MPOS) & 0x0FFF;
   return value;
 }
 
 
-bool AS5600_setMaxAngle(uint16_t value)
+bool AS5600_setMaxAngle(struct AS5600_DEV *dev, uint16_t value)
 {
   if (value > 0x0FFF) return false;
-  writeReg2(AS5600_MANG, value);
+  writeReg2(dev, AS5600_MANG, value);
   return true;
 }
 
 
-uint16_t AS5600_getMaxAngle()
+uint16_t AS5600_getMaxAngle(struct AS5600_DEV *dev)
 {
-  uint16_t value = readReg2(AS5600_MANG) & 0x0FFF;
+  uint16_t value = readReg2(dev, AS5600_MANG) & 0x0FFF;
   return value;
 }
 
@@ -274,138 +264,138 @@ uint16_t AS5600_getMaxAngle()
 //
 //  CONFIGURATION
 //
-bool AS5600_setConfigure(uint16_t value)
+bool AS5600_setConfigure(struct AS5600_DEV *dev, uint16_t value)
 {
   if (value > 0x3FFF) return false;
-  writeReg2(AS5600_CONF, value);
+  writeReg2(dev, AS5600_CONF, value);
   return true;
 }
 
 
-uint16_t AS5600_getConfigure()
+uint16_t AS5600_getConfigure(struct AS5600_DEV *dev)
 {
-  uint16_t value = readReg2(AS5600_CONF) & 0x3FFF;
+  uint16_t value = readReg2(dev, AS5600_CONF) & 0x3FFF;
   return value;
 }
 
 
 //  details configure
-bool AS5600_setPowerMode(uint8_t powerMode)
+bool AS5600_setPowerMode(struct AS5600_DEV *dev, uint8_t powerMode)
 {
   if (powerMode > 3) return false;
-  uint8_t value = readReg(AS5600_CONF + 1);
+  uint8_t value = readReg(dev, AS5600_CONF + 1);
   value &= ~AS5600_CONF_POWER_MODE;
   value |= powerMode;
-  writeReg(AS5600_CONF + 1, value);
+  writeReg(dev, AS5600_CONF + 1, value);
   return true;
 }
 
 
-uint8_t AS5600_getPowerMode()
+uint8_t AS5600_getPowerMode(struct AS5600_DEV *dev)
 {
-  return readReg(AS5600_CONF + 1) & 0x03;
+  return readReg(dev, AS5600_CONF + 1) & 0x03;
 }
 
 
-bool AS5600_setHysteresis(uint8_t hysteresis)
+bool AS5600_setHysteresis(struct AS5600_DEV *dev, uint8_t hysteresis)
 {
   if (hysteresis > 3) return false;
-  uint8_t value = readReg(AS5600_CONF + 1);
+  uint8_t value = readReg(dev, AS5600_CONF + 1);
   value &= ~AS5600_CONF_HYSTERESIS;
   value |= (hysteresis << 2);
-  writeReg(AS5600_CONF + 1, value);
+  writeReg(dev, AS5600_CONF + 1, value);
   return true;
 }
 
 
-uint8_t AS5600_getHysteresis()
+uint8_t AS5600_getHysteresis(struct AS5600_DEV *dev)
 {
-  return (readReg(AS5600_CONF + 1) >> 2) & 0x03;
+  return (readReg(dev, AS5600_CONF + 1) >> 2) & 0x03;
 }
 
 
-bool AS5600_setOutputMode(uint8_t outputMode)
+bool AS5600_setOutputMode(struct AS5600_DEV *dev, uint8_t outputMode)
 {
   if (outputMode > 2) return false;
-  uint8_t value = readReg(AS5600_CONF + 1);
+  uint8_t value = readReg(dev, AS5600_CONF + 1);
   value &= ~AS5600_CONF_OUTPUT_MODE;
   value |= (outputMode << 4);
-  writeReg(AS5600_CONF + 1, value);
+  writeReg(dev, AS5600_CONF + 1, value);
   return true;
 }
 
 
-uint8_t AS5600_getOutputMode()
+uint8_t AS5600_getOutputMode(struct AS5600_DEV *dev)
 {
-  return (readReg(AS5600_CONF + 1) >> 4) & 0x03;
+  return (readReg(dev, AS5600_CONF + 1) >> 4) & 0x03;
 }
 
 
-bool AS5600_setPWMFrequency(uint8_t pwmFreq)
+bool AS5600_setPWMFrequency(struct AS5600_DEV *dev, uint8_t pwmFreq)
 {
   if (pwmFreq > 3) return false;
-  uint8_t value = readReg(AS5600_CONF + 1);
+  uint8_t value = readReg(dev, AS5600_CONF + 1);
   value &= ~AS5600_CONF_PWM_FREQUENCY;
   value |= (pwmFreq << 6);
-  writeReg(AS5600_CONF + 1, value);
+  writeReg(dev, AS5600_CONF + 1, value);
   return true;
 }
 
 
-uint8_t AS5600_getPWMFrequency()
+uint8_t AS5600_getPWMFrequency(struct AS5600_DEV *dev)
 {
-  return (readReg(AS5600_CONF + 1) >> 6) & 0x03;
+  return (readReg(dev, AS5600_CONF + 1) >> 6) & 0x03;
 }
 
 
-bool AS5600_setSlowFilter(uint8_t mask)
+bool AS5600_setSlowFilter(struct AS5600_DEV *dev, uint8_t mask)
 {
   if (mask > 3) return false;
-  uint8_t value = readReg(AS5600_CONF);
+  uint8_t value = readReg(dev, AS5600_CONF);
   value &= ~AS5600_CONF_SLOW_FILTER;
   value |= mask;
-  writeReg(AS5600_CONF, value);
+  writeReg(dev, AS5600_CONF, value);
   return true;
 }
 
 
-uint8_t AS5600_getSlowFilter()
+uint8_t AS5600_getSlowFilter(struct AS5600_DEV *dev)
 {
-  return readReg(AS5600_CONF) & 0x03;
+  return readReg(dev, AS5600_CONF) & 0x03;
 }
 
 
-bool AS5600_setFastFilter(uint8_t mask)
+bool AS5600_setFastFilter(struct AS5600_DEV *dev, uint8_t mask)
 {
   if (mask > 7) return false;
-  uint8_t value = readReg(AS5600_CONF);
+  uint8_t value = readReg(dev, AS5600_CONF);
   value &= ~AS5600_CONF_FAST_FILTER;
   value |= (mask << 2);
-  writeReg(AS5600_CONF, value);
+  writeReg(dev, AS5600_CONF, value);
   return true;
 }
 
 
-uint8_t AS5600_getFastFilter()
+uint8_t AS5600_getFastFilter(struct AS5600_DEV *dev)
 {
-  return (readReg(AS5600_CONF) >> 2) & 0x07;
+  return (readReg(dev, AS5600_CONF) >> 2) & 0x07;
 }
 
 
-bool AS5600_setWatchDog(uint8_t mask)
+bool AS5600_setWatchDog(struct AS5600_DEV *dev, uint8_t mask)
 {
   if (mask > 1) return false;
-  uint8_t value = readReg(AS5600_CONF);
+  uint8_t value = readReg(dev, AS5600_CONF);
   value &= ~AS5600_CONF_WATCH_DOG;
   value |= (mask << 5);
-  writeReg(AS5600_CONF, value);
+  writeReg(dev, AS5600_CONF, value);
   return true;
 }
 
 
-uint8_t AS5600_getWatchDog()
+uint8_t AS5600_getWatchDog(struct AS5600_DEV *dev)
 {
-  return (readReg(AS5600_CONF) >> 5) & 0x01;
+  return (readReg(dev, AS5600_CONF) >> 5) & 0x01;
 }
 
 
@@ -413,14 +403,14 @@ uint8_t AS5600_getWatchDog()
 //
 //  OUTPUT REGISTERS
 //
-uint16_t AS5600_rawAngle()
+uint16_t AS5600_rawAngle(struct AS5600_DEV *dev)
 {
-  int16_t value = readReg2(AS5600_RAW_ANGLE);
-  if (_offset > 0) value += _offset;
+  int16_t value = readReg2(dev, AS5600_RAW_ANGLE);
+  if (dev->offset > 0) value += dev->offset;
   value &= 0x0FFF;
 
-  if ((_directionPin == AS5600_SW_DIRECTION_PIN) &&
-      (_direction == AS5600_COUNTERCLOCK_WISE))
+  if ((dev->directionPin == AS5600_SW_DIRECTION_PIN) &&
+      (dev->direction == AS5600_COUNTERCLOCK_WISE))
   {
     value = (4096 - value) & 0x0FFF;
   }
@@ -428,28 +418,28 @@ uint16_t AS5600_rawAngle()
 }
 
 
-uint16_t AS5600_readAngle()
+uint16_t AS5600_readAngle(struct AS5600_DEV *dev)
 {
-  uint16_t value = readReg2(AS5600_ANGLE);
-  if (_error != AS5600_OK)
+  uint16_t value = readReg2(dev, AS5600_ANGLE);
+  if (dev->error != AS5600_OK)
   {
-    return _lastReadAngle;
+    return dev->lastReadAngle;
   }
-  if (_offset > 0) value += _offset;
+  if (dev->offset > 0) value += dev->offset;
   value &= 0x0FFF;
 
-  if ((_directionPin == AS5600_SW_DIRECTION_PIN) &&
-      (_direction == AS5600_COUNTERCLOCK_WISE))
+  if ((dev->directionPin == AS5600_SW_DIRECTION_PIN) &&
+      (dev->direction == AS5600_COUNTERCLOCK_WISE))
   {
     //  mask needed for value == 0.
     value = (4096 - value) & 0x0FFF;
   }
-  _lastReadAngle = value;
+  dev->lastReadAngle = value;
   return value;
 }
 
 
-bool AS5600_setOffset(float degrees)
+bool AS5600_setOffset(struct AS5600_DEV *dev, float degrees)
 {
   //  expect loss of precision.
   if (fabsf(degrees) > 36000) return false;
@@ -459,21 +449,21 @@ bool AS5600_setOffset(float degrees)
   uint16_t offset = round(degrees * AS5600_DEGREES_TO_RAW);
   offset &= 0x0FFF;
   if (neg) offset = (4096 - offset) & 0x0FFF;
-  _offset = offset;
+  dev->offset = offset;
   return true;
 }
 
 
-float AS5600_getOffset()
+float AS5600_getOffset(struct AS5600_DEV *dev)
 {
-  return _offset * AS5600_RAW_TO_DEGREES;
+  return dev->offset * AS5600_RAW_TO_DEGREES;
 }
 
 
-bool AS5600_increaseOffset(float degrees)
+bool AS5600_increaseOffset(struct AS5600_DEV *dev, float degrees)
 {
   //  add offset to existing offset in degrees.
-  return AS5600_setOffset((_offset * AS5600_RAW_TO_DEGREES) + degrees);
+  return AS5600_setOffset(dev, (dev->offset * AS5600_RAW_TO_DEGREES) + degrees);
 }
 
 
@@ -481,42 +471,42 @@ bool AS5600_increaseOffset(float degrees)
 //
 //  STATUS REGISTERS
 //
-uint8_t AS5600_readStatus()
+uint8_t AS5600_readStatus(struct AS5600_DEV *dev)
 {
-  uint8_t value = readReg(AS5600_STATUS);
+  uint8_t value = readReg(dev, AS5600_STATUS);
   return value;
 }
 
 
-uint8_t AS5600_readAGC()
+uint8_t AS5600_readAGC(struct AS5600_DEV *dev)
 {
-  uint8_t value = readReg(AS5600_AGC);
+  uint8_t value = readReg(dev, AS5600_AGC);
   return value;
 }
 
 
-uint16_t AS5600_readMagnitude()
+uint16_t AS5600_readMagnitude(struct AS5600_DEV *dev)
 {
-  uint16_t value = readReg2(AS5600_MAGNITUDE) & 0x0FFF;
+  uint16_t value = readReg2(dev, AS5600_MAGNITUDE) & 0x0FFF;
   return value;
 }
 
 
-bool AS5600_detectMagnet()
+bool AS5600_detectMagnet(struct AS5600_DEV *dev)
 {
-  return (AS5600_readStatus() & AS5600_MAGNET_DETECT) > 1;
+  return (AS5600_readStatus(dev) & AS5600_MAGNET_DETECT) > 1;
 }
 
 
-bool AS5600_magnetTooStrong()
+bool AS5600_magnetTooStrong(struct AS5600_DEV *dev)
 {
-  return (AS5600_readStatus() & AS5600_MAGNET_HIGH) > 1;
+  return (AS5600_readStatus(dev) & AS5600_MAGNET_HIGH) > 1;
 }
 
 
-bool AS5600_magnetTooWeak()
+bool AS5600_magnetTooWeak(struct AS5600_DEV *dev)
 {
-  return (AS5600_readStatus() & AS5600_MAGNET_LOW) > 1;
+  return (AS5600_readStatus(dev) & AS5600_MAGNET_LOW) > 1;
 }
 
 
@@ -528,39 +518,39 @@ bool AS5600_magnetTooWeak()
 //
 //  void AS5600_burnAngle()
 //  {
-//    writeReg(AS5600_BURN, x0x80);
+//    writeReg(dev, AS5600_BURN, x0x80);
 //  }
 //
 //
 //  See https://github.com/RobTillaart/AS5600/issues/38
 //  void AS5600_burnSetting()
 //  {
-//    writeReg(AS5600_BURN, 0x40);
+//    writeReg(dev, AS5600_BURN, 0x40);
 //    delay(5);
-//    writeReg(AS5600_BURN, 0x01);
-//    writeReg(AS5600_BURN, 0x11);
-//    writeReg(AS5600_BURN, 0x10);
+//    writeReg(dev, AS5600_BURN, 0x01);
+//    writeReg(dev, AS5600_BURN, 0x11);
+//    writeReg(dev, AS5600_BURN, 0x10);
 //    delay(5);
 //  }
 
 
-float AS5600_getAngularSpeed(uint8_t mode, bool update)
+float AS5600_getAngularSpeed(struct AS5600_DEV *dev, uint8_t mode, bool update)
 {
 
 
   if (update)
   {
-    _lastReadAngle = AS5600_readAngle();
-    if (_error != AS5600_OK)
+    dev->lastReadAngle = AS5600_readAngle(dev);
+    if (dev->error != AS5600_OK)
     {
       return NAN;
     }
   }
   //  default behaviour
-  uint32_t now     = _hal.micros();
-  int      angle   = _lastReadAngle;
-  uint32_t deltaT  = now - _lastMeasurement;
-  int      deltaA  = angle - _lastAngle;
+  uint32_t now     = dev->hal.micros();
+  int      angle   = dev->lastReadAngle;
+  uint32_t deltaT  = now - dev->lastMeasurement;
+  int      deltaA  = angle - dev->lastAngle;
 
   //  assumption is that there is no more than 180° rotation
   //  between two consecutive measurements.
@@ -570,8 +560,8 @@ float AS5600_getAngularSpeed(uint8_t mode, bool update)
   float speed = (deltaA * 1e6) / deltaT;
 
   //  remember last time & angle
-  _lastMeasurement = now;
-  _lastAngle       = angle;
+  dev->lastMeasurement = now;
+  dev->lastAngle       = angle;
 
   //  return radians, RPM or degrees.
   if (mode == AS5600_MODE_RADIANS)
@@ -591,69 +581,69 @@ float AS5600_getAngularSpeed(uint8_t mode, bool update)
 //
 //  POSITION cumulative
 //
-int32_t AS5600_getCumulativePosition(bool update)
+int32_t AS5600_getCumulativePosition(struct AS5600_DEV *dev, bool update)
 {
   if (update)
   {
-    _lastReadAngle = AS5600_readAngle();
-    if (_error != AS5600_OK)
+    dev->lastReadAngle = AS5600_readAngle(dev);
+    if (dev->error != AS5600_OK)
     {
-      return _position;  //  last known position.
+      return dev->position;  //  last known position.
     }
   }
-  int16_t value = _lastReadAngle;
+  int16_t value = dev->lastReadAngle;
 
   //  whole rotation CW?
   //  less than half a circle
-  if ((_lastPosition > 2048) && ( value < (_lastPosition - 2048)))
+  if ((dev->lastPosition > 2048) && ( value < (dev->lastPosition - 2048)))
   {
-    _position = _position + 4096 - _lastPosition + value;
+    dev->position = dev->position + 4096 - dev->lastPosition + value;
   }
   //  whole rotation CCW?
   //  less than half a circle
-  else if ((value > 2048) && ( _lastPosition < (value - 2048)))
+  else if ((value > 2048) && ( dev->lastPosition < (value - 2048)))
   {
-    _position = _position - 4096 - _lastPosition + value;
+    dev->position = dev->position - 4096 - dev->lastPosition + value;
   }
   else
   {
-    _position = _position - _lastPosition + value;
+    dev->position = dev->position - dev->lastPosition + value;
   }
-  _lastPosition = value;
+  dev->lastPosition = value;
 
-  return _position;
+  return dev->position;
 }
 
 
-int32_t AS5600_getRevolutions()
+int32_t AS5600_getRevolutions(struct AS5600_DEV *dev)
 {
-  int32_t p = _position >> 12;  //  divide by 4096
+  int32_t p = dev->position >> 12;  //  divide by 4096
   if (p < 0) p++;  //  correct negative values, See #65
   return p;
 }
 
 
-int32_t AS5600_resetPosition(int32_t position)
+int32_t AS5600_resetPosition(struct AS5600_DEV *dev, int32_t position)
 {
-  int32_t old = _position;
-  _position = position;
+  int32_t old = dev->position;
+  dev->position = position;
   return old;
 }
 
 
-int32_t AS5600_resetCumulativePosition(int32_t position)
+int32_t AS5600_resetCumulativePosition(struct AS5600_DEV *dev, int32_t position)
 {
-  _lastPosition = AS5600_readAngle();
-  int32_t old = _position;
-  _position = position;
+  dev->lastPosition = AS5600_readAngle(dev);
+  int32_t old = dev->position;
+  dev->position = position;
   return old;
 }
 
 
-int AS5600_lastError()
+int AS5600_lastError(struct AS5600_DEV *dev)
 {
-  int value = _error;
-  _error = AS5600_OK;
+  int value = dev->error;
+  dev->error = AS5600_OK;
   return value;
 }
 
@@ -662,49 +652,49 @@ int AS5600_lastError()
 //
 //  These are private functions
 //
-uint8_t readReg(uint8_t reg)
+uint8_t readReg(struct AS5600_DEV *dev, uint8_t reg)
 {
 
-  _error = AS5600_OK;
-  _hal.i2c_start(_address);
-  int ret = _hal.i2c_writeBytes(&reg, 1);
-  _hal.i2c_end();
+  dev->error = AS5600_OK;
+  dev->hal.i2c_start(dev->address);
+  int ret = dev->hal.i2c_writeBytes(&reg, 1);
+  dev->hal.i2c_end();
   if (ret != 0)
   {
-    _error = AS5600_ERROR_I2C_READ_0;
+    dev->error = AS5600_ERROR_I2C_READ_0;
     return 0;
   }
   uint8_t data;
-  _hal.i2c_start(_address);
-  uint8_t n = _hal.i2c_readBytes(&data, 1);
-  _hal.i2c_end();
+  dev->hal.i2c_start(dev->address);
+  uint8_t n = dev->hal.i2c_readBytes(&data, 1);
+  dev->hal.i2c_end();
   if (n != 1)
   {
-    _error = AS5600_ERROR_I2C_READ_1;
+    dev->error = AS5600_ERROR_I2C_READ_1;
     return 0;
   }
 
   return data;
 }
 
-uint16_t readReg2(uint8_t reg)
+uint16_t readReg2(struct AS5600_DEV *dev, uint8_t reg)
 {
 
-    _error = AS5600_OK;
-    _hal.i2c_start(_address);
-    int ret = _hal.i2c_writeBytes(&reg, 1);
-    _hal.i2c_end();
+    dev->error = AS5600_OK;
+    dev->hal.i2c_start(dev->address);
+    int ret = dev->hal.i2c_writeBytes(&reg, 1);
+    dev->hal.i2c_end();
     if (ret != 0) {
-      _error = AS5600_ERROR_I2C_READ_2;
+      dev->error = AS5600_ERROR_I2C_READ_2;
       return 0;
     }
 
     uint8_t data[2];  
-    _hal.i2c_start(_address);
-    uint8_t n = _hal.i2c_readBytes(data, 2); 
-    _hal.i2c_end();
+    dev->hal.i2c_start(dev->address);
+    uint8_t n = dev->hal.i2c_readBytes(data, 2); 
+    dev->hal.i2c_end();
     if (n != 2) {
-        _error = AS5600_ERROR_I2C_READ_3;
+        dev->error = AS5600_ERROR_I2C_READ_3;
         return 0;
     }
 
@@ -712,37 +702,37 @@ uint16_t readReg2(uint8_t reg)
 }
 
 
-uint8_t writeReg(uint8_t reg, uint8_t value)
+uint8_t writeReg(struct AS5600_DEV *dev, uint8_t reg, uint8_t value)
 {
 
-    _error = AS5600_OK;
+    dev->error = AS5600_OK;
     uint8_t data[2] = { reg, value };
-    _hal.i2c_start(_address);
-    int ret = _hal.i2c_writeBytes(data, 2); 
-    _hal.i2c_end();
+    dev->hal.i2c_start(dev->address);
+    int ret = dev->hal.i2c_writeBytes(data, 2); 
+    dev->hal.i2c_end();
     if (ret != 0) {
-        _error = AS5600_ERROR_I2C_WRITE_0;
+        dev->error = AS5600_ERROR_I2C_WRITE_0;
     }
 
-    return _error;
+    return dev->error;
 }
 
 
-uint8_t writeReg2(uint8_t reg, uint16_t value)
+uint8_t writeReg2(struct AS5600_DEV *dev, uint8_t reg, uint16_t value)
 {
 
-    _error = AS5600_OK;
+    dev->error = AS5600_OK;
     uint8_t data[3] = {
         reg,
         (uint8_t)(value >> 8),     // High byte
         (uint8_t)(value & 0xFF)    // Low byte
     };
-    _hal.i2c_start(_address);
-    int ret = _hal.i2c_writeBytes(data, 3);
-    _hal.i2c_end();
+    dev->hal.i2c_start(dev->address);
+    int ret = dev->hal.i2c_writeBytes(data, 3);
+    dev->hal.i2c_end();
     if (ret != 0) {
-        _error = AS5600_ERROR_I2C_WRITE_0;
+        dev->error = AS5600_ERROR_I2C_WRITE_0;
     }
 
-    return _error;
+    return dev->error;
 }
