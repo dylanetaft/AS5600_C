@@ -5,6 +5,14 @@
 #include <stdbool.h>
 #define AS5600_LIB_VERSION              (F("0.6.5"))
 
+/*
+A note on HAL
+The HAL (Hardware Abstraction Layer) is a set of function pointers that allow the library to interact with the hardware without being tied to a specific implementation. 
+This allows for flexibility in how the library can be used, such as with different microcontrollers and their SDKs
+Some SDKs may, for example, send the START or STOP condition automatically with their TX or RX functions.  In which case, your HAL implementation should not send those conditions in the i2c_start() and i2c_end() functions
+Make sure to implement the HAL functions in a way that matches your specific hardware and SDK requirements.
+*/
+
 struct AS5600_HAL {
     void (*digitalWrite)(uint16_t pin, uint8_t value);
     void (*i2c_start)(uint8_t address); // SDA sent low, SCL HI, buffers address
