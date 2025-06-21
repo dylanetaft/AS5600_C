@@ -171,6 +171,7 @@ bool AS5600_begin(uint8_t directionPin, struct AS5600_HAL hal)
   assert(_hal.i2c_writeBytes != NULL);
   assert(_hal.i2c_readBytes != NULL);
   assert(_hal.micros != NULL);
+  assert(_hal.digitalWrite != NULL);
 
   _directionPin = directionPin;
 
@@ -202,7 +203,7 @@ uint8_t AS5600_getAddress()
 void AS5600_setDirection(uint8_t direction)
 {
   _direction = direction;
-  if (_directionPin != AS5600_SW_DIRECTION_PIN && _hal.digitalWrite != NULL)
+  if (_directionPin != AS5600_SW_DIRECTION_PIN)
   {
     _hal.digitalWrite(_directionPin, _direction);
   }
