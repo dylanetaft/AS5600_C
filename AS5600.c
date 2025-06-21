@@ -166,7 +166,7 @@ const uint8_t AS5600_MAGNET_DETECT = 0x20;
 bool AS5600_begin(uint8_t directionPin, struct AS5600_HAL hal)
 {
   _hal = hal;
-  assert(_hal.i2c_begin != NULL);
+  assert(_hal.i2c_start != NULL);
   assert(_hal.i2c_end != NULL);
   assert(_hal.i2c_writeBytes != NULL);
   assert(_hal.i2c_readBytes != NULL);
@@ -185,8 +185,10 @@ bool AS5600_begin(uint8_t directionPin, struct AS5600_HAL hal)
 bool AS5600_isConnected()
 {
 
-  _hal.i2c_begin(_address);
-  return ( _hal.i2c_end() == 0);
+  _hal.i2c_start(_address);
+  int ret = _hal.i2c_writeBytes(NULL,0);
+  _hal.i2c_end();
+  return ( ret == 0);
 }
 
 
@@ -664,16 +666,17 @@ uint8_t readReg(uint8_t reg)
 {
 
   _error = AS5600_OK;
-  _hal.i2c_begin(_address);
-  int ret = _hal.i2c_writeBytes(_address, &reg, 1);
+  _hal.i2c_start(_address);
+  int ret = _hal.i2c_writeBytes(&reg, 1);
+  _hal.i2c_end();
   if (ret != 0)
   {
-    _hal.i2c_end();
     _error = AS5600_ERROR_I2C_READ_0;
     return 0;
   }
   uint8_t data;
-  uint8_t n = _hal.i2c_readBytes(_address, &data, 1);
+  _hal.i2c_start(_address);
+  uint8_t n = _hal.i2c_readBytes(&data, 1);
   _hal.i2c_end();
   if (n != 1)
   {
@@ -688,16 +691,17 @@ uint16_t readReg2(uint8_t reg)
 {
 
     _error = AS5600_OK;
-    _hal.i2c_begin(_address);
-    int ret = _hal.i2c_writeBytes(_address, &reg, 1);
+    _hal.i2c_start(_address);
+    int ret = _hal.i2c_writeBytes(&reg, 1);
+    _hal.i2c_end();
     if (ret != 0) {
-      _hal.i2c_end();
       _error = AS5600_ERROR_I2C_READ_2;
       return 0;
     }
 
     uint8_t data[2];  
-    uint8_t n = _hal.i2c_readBytes(_address, data, 2); 
+    _hal.i2c_start(_address);
+    uint8_t n = _hal.i2c_readBytes(data, 2); 
     _hal.i2c_end();
     if (n != 2) {
         _error = AS5600_ERROR_I2C_READ_3;
@@ -713,8 +717,8 @@ uint8_t writeReg(uint8_t reg, uint8_t value)
 
     _error = AS5600_OK;
     uint8_t data[2] = { reg, value };
-    _hal.i2c_begin(_address);
-    int ret = _hal.i2c_writeBytes(_address, data, 2); 
+    _hal.i2c_start(_address);
+    int ret = _hal.i2c_writeBytes(data, 2); 
     _hal.i2c_end();
     if (ret != 0) {
         _error = AS5600_ERROR_I2C_WRITE_0;
@@ -733,8 +737,8 @@ uint8_t writeReg2(uint8_t reg, uint16_t value)
         (uint8_t)(value >> 8),     // High byte
         (uint8_t)(value & 0xFF)    // Low byte
     };
-    _hal.i2c_begin(_address);
-    int ret = _hal.i2c_writeBytes(_address, data, 3);
+    _hal.i2c_start(_address);
+    int ret = _hal.i2c_writeBytes(data, 3);
     _hal.i2c_end();
     if (ret != 0) {
         _error = AS5600_ERROR_I2C_WRITE_0;

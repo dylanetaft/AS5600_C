@@ -7,10 +7,10 @@
 
 struct AS5600_HAL {
     void (*digitalWrite)(uint16_t pin, uint8_t value);
-    void (*i2c_begin)(uint8_t address);
-    int (*i2c_end)();
-    int (*i2c_writeBytes)(uint8_t address, uint8_t *data, uint8_t length);
-    int (*i2c_readBytes)(uint8_t address, uint8_t *data, uint8_t length);
+    void (*i2c_start)(uint8_t address); // SDA sent low, SCL HI, buffers address
+    void (*i2c_end)(); // SDA sent high, SCL HI, release bus
+    int (*i2c_writeBytes)(uint8_t *data, uint8_t length); // address + 0 write bit + data sent, returns ack
+    int (*i2c_readBytes)(uint8_t *data, uint8_t length); // address + 1 read bit sent, wait for data, returns ack
     uint32_t (*micros)();
 } ;
 
